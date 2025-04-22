@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
+import express from "express";
 import { z } from "zod";
 import { searchLibraries, fetchLibraryDocumentation } from "./lib/api.js";
 import { formatSearchResults } from "./lib/utils.js";
@@ -129,9 +130,39 @@ server.tool(
 );
 
 async function main() {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  console.error("Context7 Documentation MCP Server running on stdio");
+  const app = express();
+  app.use(express.json());
+
+  // Store SSE transports for each session
+  const transports: Record<string, SSEServerTransport> = {};
+
+  // SSE endpoint
+  app.get('/sse', async (req, res) => {
+    const transport = new SSEServerTransport('/messages', res);
+    transports[transport.sessionId] = transport;
+    
+    res.on("close", () => {
+      delete transports[transport.sessionId];
+    });
+    
+    await server.connect(transport);
+  });
+
+  // Message endpoint for handling incoming messages
+  app.post('/messages', async (req, res) => {
+    const sessionId = req.query.sessionId as string;
+    const transport = transports[sessionId];
+    if (transport) {
+      await transport.handlePostMessage(req, res);
+    } else {
+      res.status(400).send('No transport found for sessionId');
+    }
+  });
+
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () => {
+    console.error(`Context7 Documentation MCP Server running on port ${PORT}`);
+  });
 }
 
 main().catch((error) => {
