@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   context7-mcp-server:
-    image: tolak/context7-mcp-server:v0.1.0
+    image: tolak/context7-mcp-server:v0.1.1
     ports:
       - "3000:3000"
     environment:
